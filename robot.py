@@ -1,5 +1,3 @@
-import math
-
 import ctre
 import magicbot
 import wpilib
@@ -10,7 +8,6 @@ from components.drivetrain import Drivetrain
 from components.elevator import Elevator
 from components.grippers import Grippers
 from components.handles import Handles
-from controllers.angle_controller import AngleController
 
 
 class MyRobot(magicbot.MagicRobot):
@@ -18,22 +15,6 @@ class MyRobot(magicbot.MagicRobot):
     elevator: Elevator
     handles: Handles
     grippers: Grippers
-    angle_ctrl: AngleController
-
-    WHL_DIAMETER = 15.24
-    WHL_CIRC = WHL_DIAMETER * math.pi
-
-    ENCODER_RES = 1024
-
-    QUAD_MULTIPLIER = 4
-
-    STRENGTH_GEAR_RATIO = 16.5
-
-    DIST_TO_TICKS = WHL_CIRC / (ENCODER_RES * QUAD_MULTIPLIER *
-                                STRENGTH_GEAR_RATIO)
-
-    MAX_SPEED = 0.65
-    MIN_SPEED = -MAX_SPEED
 
     def createObjects(self):
 
@@ -43,23 +24,14 @@ class MyRobot(magicbot.MagicRobot):
         self.rr_motor = ctre.WPI_TalonSRX(5)
         self.rf_motor = ctre.WPI_TalonSRX(6)
 
-        self.rf_motor.configSelectedFeedbackSensor(ctre.WPI_TalonSRX.
-                                                   FeedbackDevice.
-                                                   CTRE_MagEncoder_Relative)
-        self.talon.setSensorPhase(True)
-        self.setOutputRange(self.MIN_SPEED, self.MAX_SPEED)
-
-        self.setAbsoluteTolerance(self.ABS_TOLERANCE)
-
-        self.ABS_TOLERANCE = (3 / self.DIST_TO_TICKS)
-
         self.left = wpilib.SpeedControllerGroup(self.lf_motor, self.lr_motor)
         self.right = wpilib.SpeedControllerGroup(self.rf_motor, self.rr_motor)
 
         self.drive = wpilib.drive.DifferentialDrive(self.left, self.right)
 
-        self.drivetrain_solenoid = wpilib.DoubleSolenoid(2, 3)
         self.drivetrain_gyro = wpilib.AnalogGyro(1)
+
+        self.drivetrain_solenoid = wpilib.DoubleSolenoid(2, 3)
 
         self.elevator_motor = wpilib.VictorSP(2)
 
@@ -96,8 +68,6 @@ class MyRobot(magicbot.MagicRobot):
             self.grippers.intake()
         elif self.button_4.get():
             self.grippers.exhaust()
-        if self.button_7.get():
-            self.angle_ctrl.align_to(0)
         if self.button_10.get():
             self.drivetrain.set_speed_state()
         elif self.button_11.get():
@@ -105,4 +75,4 @@ class MyRobot(magicbot.MagicRobot):
 
 
 if __name__ == '__main__':
-    wpilib.run(MyRobot)
+    wpilib.run(MyRobot, physics_enabled=True)
