@@ -1,145 +1,101 @@
 import math
-import time
+import numpy as np
 
-import ctre
-import magicbot
 import wpilib
-import wpilib.buttons
 import wpilib.drive
+import wpilib.buttons
+import ctre
+from magicbot import MagicRobot
+from networktables import NetworkTables
+import pathfinder as pf
 
-from components.drivetrain import Drivetrain
-from components.elevator import Elevator
-from components.grippers import Grippers
-from components.handles import Handles
-
-class MyRobot(magicbot.MagicRobot):
-    drivetrain: Drivetrain
-    elevator: Elevator
-    handles: Handles
-    grippers: Grippers
-
-    WHL_DIAMETER = 15.24
-    WHL_CIRC = WHL_DIAMETER * math.pi
-
-    ENCODER_RES = 1024
-
-    QUAD_MULTIPLIER = 4
-
-    STRENGTH_GEAR_RATIO = 16.5
-
-    DIST_TO_TICKS = WHL_CIRC / (ENCODER_RES * QUAD_MULTIPLIER *
-                                STRENGTH_GEAR_RATIO)
-
-    ABS_TOLERANCE = 3 / DIST_TO_TICKS
-
-    MAX_SPEED = 3.5    #0.65
-    MIN_SPEED = -MAX_SPEED
+#from components.DriveTrain import DriveTrain
+# from components.motion_profile import MotionProfile
+#from components.rpm_counter import RPMCounter
+from components.feed_forword import FeedForword
 
 
+class MyRobot(MagicRobot):
+   # drivetrain: DriveTrain
+   #  motion_profile: MotionProfile
+    # rpm_counter: RPMCounter
+    feed_forword:FeedForword
 
-    TIME_OUT_MS = 10
-    PID_LOOP_IDX = 0
-    SLOT_IDX = 0
+    PID_IDX = 0
+    TIMEOUT_MS = 10
+    ITER_NUM = 1000
+    GEAR_RATIO = 16.73 #power speed 7.56
+    EVO_RATIO = 3
+    DIAMETER = 6 * 2.54 * math.pi
+    RIGHT_RATIO =  1.2263 / (GEAR_RATIO * DIAMETER * 100)
+    LEFT_RATIO = 1 / (EVO_RATIO * DIAMETER * 2 * 10)
 
     def createObjects(self):
 
-        self.left_rear_motor = ctre.WPI_TalonSRX(2)
-        self.left_front_motor = ctre.WPI_TalonSRX(1)
+        NetworkTables.initialize()
 
-        self.right_rear_motor = ctre.WPI_TalonSRX(5)
-        self.right_front_motor = ctre.WPI_TalonSRX(6)
+        self.table = NetworkTables.getTable("SmartDashboard")
 
-        self.left_rear_motor.follow(self.left_front_motor)
-        self.right_rear_motor.follow(self.right_front_motor)
+        self.right_drive_talon = ctre.WPI_TalonSRX(6)
+        self.seocend_right_drive_talon = ctre.WPI_TalonSRX(5)
 
 
-        # self.right_front_motor.\
-        #     configSelectedFeedbackSensor(feedbackDevice=ctre.WPI_TalonSRX.
-        #                                  FeedbackDevice.CTRE_MagEncoder_Relative,
-        #                                  pidIdx=self.PID_LOOP_IDX, timeoutMs=self.TIME_OUT_MS)
-        #
-        # self.left_front_motor.\
-        #     configSelectedFeedbackSensor(feedbackDevice=ctre.WPI_TalonSRX.
-        #                                  FeedbackDevice.CTRE_MagEncoder_Relative,
-        #                                  pidIdx=self.PID_LOOP_IDX, timeoutMs=self.TIME_OUT_MS)
-        #
-        # self.right_front_motor.setSensorPhase(True)
-        # self.left_front_motor.setSensorPhase(False)
+        self.left_drive_talon = ctre.WPI_TalonSRX(1)
+        self.seocend_left_drive_talon = ctre.WPI_TalonSRX(2)
 
-        #self.rf_motor.setOutputRange(self.MIN_SPEED, self.MAX_SPEED)
-        #self.lr_motor.setOutputRange(self.MIN_SPEED, self.MAX_SPEED)
+        self.seocend_right_drive_talon.follow(self.right_drive_talon)
+        self.seocend_left_drive_talon.follow(self.left_drive_talon)
 
 
-        #self.left = wpilib.SpeedControllerGroup(self.lf_motor, self.lr_motor)
-        #self.right = wpilib.SpeedControllerGroup(self.rf_motor, self.rr_motor)
+        #elf.drive = wpilib.drive.DifferentialDrive(leftMotor=self.left_drive_talon,
+         #                                           rightMotor=self.right_drive_talon)
 
-        self.left = wpilib.SpeedControllerGroup(self.left_front_motor)
-        self.right = wpilib.SpeedControllerGroup(self.right_front_motor)
-        self.drive = wpilib.drive.DifferentialDrive(self.left, self.right)
+        self.left_drive_talon.configSelectedFeedbackSensor(ctre.FeedbackDevice.CTRE_MagEncoder_Relative,
+                                                self.PID_IDX, self.TIMEOUT_MS)
+        self.right_drive_talon.configSelectedFeedbackSensor(ctre.FeedbackDevice.CTRE_MagEncoder_Relative,
+                                                self.PID_IDX, self.TIMEOUT_MS)
+
+        self.left_encoder = self.left_drive_talon.getSensorCollection()
+        self.right_encoder = self.right_drive_talon.getSensorCollection()
 
         self.drivetrain_solenoid = wpilib.DoubleSolenoid(2, 3)
-        self.drivetrain_gyro = wpilib.AnalogGyro(1)
-
-        self.elevator_motor = wpilib.VictorSP(2)
-
-        self.top_switch = wpilib.DigitalInput(4)
-        self.bot_switch = wpilib.DigitalInput(5)
-
-        self.handles_solenoid = wpilib.DoubleSolenoid(0, 1)
-
-        self.l_gripper_motor = wpilib.VictorSP(0)
-        self.r_gripper_motor = wpilib.VictorSP(1)
 
         self.joystick = wpilib.Joystick(0)
 
-        self.trigger = wpilib.buttons.JoystickButton(self.joystick, 1)
-        self.button_2 = wpilib.buttons.JoystickButton(self.joystick, 2)
-        self.button_3 = wpilib.buttons.JoystickButton(self.joystick, 3)
-        self.button_4 = wpilib.buttons.JoystickButton(self.joystick, 4)
-        self.button_5 = wpilib.buttons.JoystickButton(self.joystick, 5)
-        self.button_7 = wpilib.buttons.JoystickButton(self.joystick, 7)
-        self.button_10 = wpilib.buttons.JoystickButton(self.joystick, 10)
-        self.button_11 = wpilib.buttons.JoystickButton(self.joystick, 11)
-        self.profile_btn = wpilib.buttons.JoystickButton(self.joystick, 9)
+        self.gear_change_btn = wpilib.buttons.JoystickButton(self.joystick, 1)
+
+        self.presure_sensor = wpilib.AnalogInput(0)
+        self.pressure_history = []
+
+    def handle_presure(self, k = 32):
+        '''
+        function will calculate the mean pressure in k times and send it to the smartdashboard
+        '''
+        if len(self.pressure_history) == k:
+            self.pressure_history.pop(0)
+        self.pressure_history.append(self.presure_sensor.getVoltage())
+        self.pressure = (50 * np.mean(self.pressure_history)) - 25
+        self.table.putNumber("pressure", self.presure)
+
 
     def teleopInit(self):
-        self.start_time = time.time()
-        self.counter = 0
+#       self.right_encoder.setQuadraturePosition(newPosition=0, timeoutMs=self.TIMEOUT_MS)
+#        self.left_encoder.setQuadraturePosition(newPosition=0, timeoutMs=self.TIMEOUT_MS)
+        #self.motion_profile.reset()
+        self.feed_forword.reset()
 
+
+        # pass
     def teleopPeriodic(self):
-        # if self.counter < 100:
-        #     self.counter += 1
-        #     self.drivetrain.move_y(1)
-        # elif self.counter==100:
-        #     self.end_time = time.time()
-        #     print("rpm right =", self.right_front_motor.getAnalogIn() / (self.end_time - self.start_time))
-        #     print("rpm left =", self.left_front_motor.getAnalogIn() / (self.end_time - self.start_time))
-        #     raise("exepected exception")
+        # if self.rpm_counter.enable:
+        #     return None
+        # if self.gear_change_btn.get():
+        #     self.drivetrain.change_gear_mode()
 
-        return None
+        # self.drivetrain.move(-self.joystick.getY(), self.joystick.getX())
 
-
-        if not self.drivetrain.overload_joystick:
-            self.drivetrain.move(self.joystick.getX(), -self.joystick.getY())
-
-        if self.button_2.get():
-            self.elevator.lower_elevator()
-        elif self.button_3.get():
-            self.elevator.raise_elevator()
-        if self.button_5.get():
-            self.handles.change_handles_state()
-        if self.trigger.get():
-            self.grippers.intake()
-        elif self.button_4.get():
-            self.grippers.exhaust()
-        if self.button_7.get():
-            self.angle_ctrl.align_to(0)
-        if self.button_10.get():
-            self.drivetrain.set_speed_state()
-        elif self.button_11.get():
-            self.drivetrain.set_strength_state()
-        if self.profile_btn.get():
-            self.drivetrain.motion_profile()
+        self.table.putNumber("rightVal", self.right_encoder.getQuadraturePosition() * self.RIGHT_RATIO)
+        self.table.putNumber("leftVal", self.left_encoder.getQuadraturePosition() * self.LEFT_RATIO)
 
 
 if __name__ == '__main__':
