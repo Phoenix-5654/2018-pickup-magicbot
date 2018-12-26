@@ -1,12 +1,10 @@
-import os.path
-import pickle
-
 import ctre
+import os.path
 import pathfinder as pf
+import pickle
 import wpilib
-from magicbot import AutonomousStateMachine, state
-
 from components.drivetrain import Drivetrain
+from magicbot import AutonomousStateMachine, state, timed_state
 
 
 class DriveAndTurn(AutonomousStateMachine):
@@ -27,7 +25,8 @@ class DriveAndTurn(AutonomousStateMachine):
 
     @state(first=True)
     def setup(self):
-        print("setting")
+        self.drivetrain.overload_joystick = True
+
         if wpilib.RobotBase.isSimulation():
             points = [
                 pf.Waypoint(0, 0, 0),
@@ -38,7 +37,7 @@ class DriveAndTurn(AutonomousStateMachine):
                 points,
                 pf.FIT_HERMITE_CUBIC,
                 pf.SAMPLES_HIGH,
-                dt=0.03,
+                dt=0.02,
                 max_velocity=self.MAX_VELOCITY,
                 max_acceleration=self.MAX_ACCELERATION,
                 max_jerk=120.0,
@@ -90,27 +89,25 @@ class DriveAndTurn(AutonomousStateMachine):
 
         self.next_state_now('drive_and_turn')
 
-    @state
+    @timed_state(duration=4, must_finish=True)
     def drive_and_turn(self):
-        while not self.left_follower.isFinished() and not self.right_follower.isFinished():
-            l = self.left_follower.calculate(
-                self.lf_motor.getQuadraturePosition())
-            r = self.right_follower.calculate(
-                self.rf_motor.getQuadraturePosition())
+        l = self.left_follower.calculate(
+            self.lf_motor.getQuadraturePosition())
+        r = self.right_follower.calculate(
+            self.rf_motor.getQuadraturePosition())
 
-            gyro_heading = (
-                -self.drivetrain.gyro.getAngle()
-            )
-            desired_heading = pf.r2d(
-                self.left_follower.getHeading()
-            )
+        gyro_heading = (
+            -self.drivetrain.gyro.getAngle()
+        )
+        desired_heading = pf.r2d(
+            self.left_follower.getHeading()
+        )
 
-            angle_difference = pf.boundHalfDegrees(
-                desired_heading - gyro_heading)
-            turn = 5 * (-1.0 / 80.0) * angle_difference
+        angle_difference = pf.boundHalfDegrees(
+            desired_heading - gyro_heading)
+        turn = 5 * (-1.0 / 80.0) * angle_difference
 
-            l += turn
-            r -= turn
+        l = l + turn
+        r = r - turn
 
-            self.drivetrain.drive.tankDrive(l, r)
-        self.done()
+        self.drivetrain.drive.tankDrive(l, r)

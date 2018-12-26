@@ -30,12 +30,10 @@ class Drivetrain:
         self.move_y(y)
 
     def execute(self):
-        self.drive.arcadeDrive(self.y, self.x)
 
         if self.speed_state:
             self.solenoid.set(self.solenoid.Value(self.SPD_STATE))
         elif self.strength_state:
             self.solenoid.set(self.solenoid.Value(self.STR_STATE))
 
-        self.x = self.y = 0
         self.speed_state = self.strength_state = self.overload_joystick = False
