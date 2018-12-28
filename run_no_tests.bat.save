@@ -1,0 +1,2 @@
+python robot.py 
+python robot.py deploy --nc --skip-tests
